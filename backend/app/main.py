@@ -20,7 +20,7 @@ async def health() -> dict[str, str]:
 
 @app.get("/api/integrations")
 async def integrations() -> dict[str, list[dict[str, object]]]:
-    return {"integrations": [item.__dict__ for item in IntegrationAdapters().all()]}
+    return {"integrations": [item.__dict__ for item in await IntegrationAdapters().all("example.com")]}
 
 
 @app.post("/api/workflows/audit")
