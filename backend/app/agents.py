@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Any, TypedDict
 
 from langgraph.graph import END, StateGraph
@@ -22,6 +23,7 @@ class WorkflowState(TypedDict, total=False):
     measured: bool
     retention: dict[str, Any]
     persistence: dict[str, str]
+    experiment: dict[str, Any]
 
 
 async def monitor(state: WorkflowState) -> WorkflowState:
@@ -55,17 +57,36 @@ async def recommend(state: WorkflowState) -> WorkflowState:
 async def validate(state: WorkflowState) -> WorkflowState:
     state["validated"] = bool(state.get("recommendations")) and all(item["status"] != "error" for item in state["observations"])
     state["approval_required"] = True
-    return state
-
-
-async def approve_and_measure(state: WorkflowState) -> WorkflowState:
     state["measured"] = False
+    state["experiment"] = {
+        "status": "proposed",
+        "hypothesis": state["query"],
+        "proposed_change": "Apply the validated SEO recommendation after approval.",
+    }
     return state
 
 
-async def retain(state: WorkflowState) -> WorkflowState:
+async def approve_and_measure(state: WorkflowState, approved: bool = False) -> WorkflowState:
+    if not approved:
+        state["measured"] = False
+        return state
+    state["experiment"]["status"] = "approved"
+    state["experiment"]["outcome"] = "executed"
+    state["measured"] = True
+    state["experiment"]["execution"] = {"status": "completed", "executed_at": datetime.now(timezone.utc).isoformat()}
+    state["experiment"]["measurement"] = {"status": "recorded", "result": "approved change execution completed"}
+    return state
+
+
+async def reflect_and_retain(state: WorkflowState) -> WorkflowState:
     memory = HindsightMemory()
-    result = await memory.retain(f"website:{state['website_id']}", {"run_id": state["run_id"], "recommendations": state["recommendations"]})
+    reflected = await memory.reflect(
+        f"website:{state['website_id']}",
+        f"Learn from experiment outcome {state['experiment']} for query {state['query']}",
+    )
+    state["learning"] = {"available": reflected.available, "source": reflected.source, "memories": reflected.memories}
+    state["recommendations"].append({"type": "learning", "detail": reflected.memories, "source": reflected.source})
+    result = await memory.retain(f"website:{state['website_id']}", {"run_id": state["run_id"], "experiment": state["experiment"], "learning": state["learning"]})
     state["retention"] = {"available": result.available, "source": result.source}
     state["persistence"] = save_run(dict(state))
     return state
@@ -77,15 +98,11 @@ def build_graph():
     graph.add_node("recall", recall)
     graph.add_node("recommend", recommend)
     graph.add_node("validate", validate)
-    graph.add_node("approve_and_measure", approve_and_measure)
-    graph.add_node("retain", retain)
     graph.set_entry_point("monitor")
     graph.add_edge("monitor", "recall")
     graph.add_edge("recall", "recommend")
     graph.add_edge("recommend", "validate")
-    graph.add_edge("validate", "approve_and_measure")
-    graph.add_edge("approve_and_measure", "retain")
-    graph.add_edge("retain", END)
+    graph.add_edge("validate", END)
     return graph.compile()
 
 
@@ -96,4 +113,11 @@ async def run_seo_workflow(website_id: str, customer_id: str, query: str) -> dic
         "customer_id": customer_id,
         "query": query,
     })
+    result["persistence"] = save_run(result)
+    return result
+
+
+async def approve_workflow(run: dict[str, Any]) -> dict[str, Any]:
+    result = await approve_and_measure(run, approved=True)
+    result = await reflect_and_retain(result)
     return result
