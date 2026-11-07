@@ -28,7 +28,19 @@ def save_run(run: dict[str, Any]) -> dict[str, str]:
 
 
 def load_run(run_id: str) -> dict[str, Any] | None:
-    return RUNS.get(run_id)
+    if run_id in RUNS:
+        return RUNS[run_id]
+    try:
+        with psycopg.connect(get_settings().database_url, connect_timeout=3) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT payload FROM workflow_runs WHERE id = %s", (run_id,))
+                row = cursor.fetchone()
+        if row:
+            RUNS[run_id] = row[0]
+            return row[0]
+    except (psycopg.Error, OSError):
+        return None
+    return None
 
 
 def save_experiment(experiment: dict[str, Any]) -> dict[str, str]:
@@ -50,4 +62,13 @@ def save_experiment(experiment: dict[str, Any]) -> dict[str, str]:
 
 
 def list_experiments() -> list[dict[str, Any]]:
+    try:
+        with psycopg.connect(get_settings().database_url, connect_timeout=3) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT payload FROM seo_experiments ORDER BY id")
+                rows = cursor.fetchall()
+            experiments = [row[0] for row in rows]
+        EXPERIMENTS.update({item["experiment_id"]: item for item in experiments})
+    except (psycopg.Error, OSError):
+        pass
     return list(EXPERIMENTS.values())

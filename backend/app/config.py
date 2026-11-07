@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,6 +8,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/seo_mind"
     groq_api_key: str | None = None
     hindsight_base_url: str | None = None
+    hindsight_api_key: SecretStr | None = None
+    hindsight_bank_id: str = "seo-mind-memory"
     gsc_access_token: str | None = None
     github_token: str | None = None
     pagespeed_api_key: str | None = None
@@ -16,4 +19,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

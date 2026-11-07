@@ -7,7 +7,7 @@ from langgraph.graph import END, StateGraph
 from .integrations import IntegrationAdapters
 from .llm import recommend_with_groq
 from .memory import HindsightMemory
-from .persistence import save_run
+from .persistence import save_experiment, save_run
 
 
 class WorkflowState(TypedDict, total=False):
@@ -59,10 +59,13 @@ async def validate(state: WorkflowState) -> WorkflowState:
     state["approval_required"] = True
     state["measured"] = False
     state["experiment"] = {
+        "experiment_id": str(uuid.uuid4()),
+        "website_id": state["website_id"],
         "status": "proposed",
         "hypothesis": state["query"],
         "proposed_change": "Apply the validated SEO recommendation after approval.",
     }
+    save_experiment(state["experiment"])
     return state
 
 
@@ -75,6 +78,7 @@ async def approve_and_measure(state: WorkflowState, approved: bool = False) -> W
     state["measured"] = True
     state["experiment"]["execution"] = {"status": "completed", "executed_at": datetime.now(timezone.utc).isoformat()}
     state["experiment"]["measurement"] = {"status": "recorded", "result": "approved change execution completed"}
+    save_experiment(state["experiment"])
     return state
 
 

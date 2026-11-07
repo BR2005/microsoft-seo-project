@@ -1,11 +1,20 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from .agents import approve_workflow, run_seo_workflow
 from .integrations import IntegrationAdapters
+from .memory import HindsightMemory
 from .persistence import list_experiments, load_run, save_experiment
 
 app = FastAPI(title="SEO-MIND API", version="0.1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class WorkflowRequest(BaseModel):
@@ -27,6 +36,16 @@ class ExperimentRequest(BaseModel):
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/memory/status")
+async def memory_status() -> dict[str, object]:
+    result = await HindsightMemory().recall("system", "SEO-MIND connectivity check")
+    return {
+        "connected": result.available,
+        "source": result.source,
+        "bank_id": HindsightMemory().settings.hindsight_bank_id,
+    }
 
 
 @app.get("/api/integrations")
@@ -63,4 +82,3 @@ async def create_experiment(request: ExperimentRequest) -> dict[str, object]:
     experiment = {"experiment_id": str(uuid.uuid4()), **request.model_dump(), "status": "proposed", "outcome": None}
     save_experiment(experiment)
     return experiment
-

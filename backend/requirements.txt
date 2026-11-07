@@ -4,4 +4,4 @@ pydantic-settings==2.7.1
 httpx==0.28.1
 psycopg[binary]==3.2.3
 langgraph==0.2.60
-
+hindsight-client==1.2.0
